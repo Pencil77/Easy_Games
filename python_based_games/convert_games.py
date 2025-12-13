@@ -9,8 +9,8 @@ game_files = {
     'craft_game.py': 'Termux Craft (Minecraft 2D)',
     'shooting_game.py': 'Neon Space Shooter',
     'vice_city_game.py': 'Vice City 3D (Open World)',
-    'birds.py': 'Angry Birds Clone',       # Including this if you created it
-    'calculator.py': 'Python Calculator'    # Including this if you created it
+    'birds.py': 'Angry Birds Clone',
+    '2048_game.py' : '2048 Game'
 }
 
 index_content = """

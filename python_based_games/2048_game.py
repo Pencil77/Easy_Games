@@ -1,0 +1,250 @@
+from flask import Flask, render_template_string
+
+app = Flask(__name__)
+
+GAME_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>2048 Termux</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body {
+            background-color: #faf8ef;
+            color: #776e65;
+            font-family: "Clear Sans", "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            touch-action: none; /* Prevent scrolling */
+        }
+        h1 { font-size: 60px; margin: 0; color: #776e65; }
+        .score-container {
+            background: #bbada0;
+            padding: 5px 15px;
+            border-radius: 5px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        #game-board {
+            width: 300px;
+            height: 300px;
+            background: #bbada0;
+            border-radius: 6px;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(4, 1fr);
+            gap: 10px;
+        }
+        .tile {
+            width: 100%;
+            height: 100%;
+            background: #cdc1b4;
+            border-radius: 3px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 30px;
+            font-weight: bold;
+            color: #776e65;
+            transition: transform 0.1s ease-in-out;
+        }
+        
+        /* Tile Colors */
+        .t-0 { background: #cdc1b4; color: transparent; }
+        .t-2 { background: #eee4da; }
+        .t-4 { background: #ede0c8; }
+        .t-8 { background: #f2b179; color: #f9f6f2; }
+        .t-16 { background: #f59563; color: #f9f6f2; }
+        .t-32 { background: #f67c5f; color: #f9f6f2; }
+        .t-64 { background: #f65e3b; color: #f9f6f2; }
+        .t-128 { background: #edcf72; color: #f9f6f2; font-size: 24px; }
+        .t-256 { background: #edcc61; color: #f9f6f2; font-size: 24px; }
+        .t-512 { background: #edc850; color: #f9f6f2; font-size: 24px; }
+        .t-1024 { background: #edc53f; color: #f9f6f2; font-size: 20px; }
+        .t-2048 { background: #edc22e; color: #f9f6f2; font-size: 20px; box-shadow: 0 0 10px #edc22e; }
+
+        .controls { margin-top: 20px; font-size: 14px; color: #777; }
+        button {
+            background: #8f7a66; color: white; border: none; padding: 10px 20px;
+            font-size: 18px; border-radius: 5px; cursor: pointer; margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div style="display:flex; justify-content:space-between; width: 300px; align-items:center;">
+        <h1>2048</h1>
+        <div class="score-container">Score: <span id="score">0</span></div>
+    </div>
+
+    <div id="game-board"></div>
+
+    <button onclick="initGame()">New Game</button>
+    <div class="controls">Swipe to move tiles</div>
+
+    <script>
+        const boardElement = document.getElementById('game-board');
+        const scoreElement = document.getElementById('score');
+        let board = [];
+        let score = 0;
+
+        function initGame() {
+            board = [
+                [0, 0, 0, 0],
+                [0, 0, 0, 0],
+                [0, 0, 0, 0],
+                [0, 0, 0, 0]
+            ];
+            score = 0;
+            scoreElement.innerText = "0";
+            spawnTile();
+            spawnTile();
+            drawBoard();
+        }
+
+        function spawnTile() {
+            let emptyTiles = [];
+            for (let r = 0; r < 4; r++) {
+                for (let c = 0; c < 4; c++) {
+                    if (board[r][c] === 0) emptyTiles.push({r, c});
+                }
+            }
+            if (emptyTiles.length > 0) {
+                let rand = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
+                board[rand.r][rand.c] = Math.random() < 0.9 ? 2 : 4;
+            }
+        }
+
+        function drawBoard() {
+            boardElement.innerHTML = "";
+            for (let r = 0; r < 4; r++) {
+                for (let c = 0; c < 4; c++) {
+                    let val = board[r][c];
+                    let tile = document.createElement("div");
+                    tile.className = "tile t-" + (val > 2048 ? "2048" : val);
+                    tile.innerText = val > 0 ? val : "";
+                    boardElement.appendChild(tile);
+                }
+            }
+        }
+
+        // --- Game Logic ---
+
+        function slide(row) {
+            let arr = row.filter(val => val);
+            let missing = 4 - arr.length;
+            let zeros = Array(missing).fill(0);
+            return arr.concat(zeros);
+        }
+
+        function combine(row) {
+            for (let i = 0; i < 3; i++) {
+                if (row[i] !== 0 && row[i] === row[i + 1]) {
+                    row[i] *= 2;
+                    row[i + 1] = 0;
+                    score += row[i];
+                    scoreElement.innerText = score;
+                }
+            }
+            return row;
+        }
+
+        function move(dir) {
+            let oldBoard = JSON.stringify(board);
+            
+            if (dir === 'left' || dir === 'right') {
+                for (let r = 0; r < 4; r++) {
+                    let row = board[r];
+                    if (dir === 'right') row.reverse();
+                    row = slide(row);
+                    row = combine(row);
+                    row = slide(row);
+                    if (dir === 'right') row.reverse();
+                    board[r] = row;
+                }
+            } else if (dir === 'up' || dir === 'down') {
+                for (let c = 0; c < 4; c++) {
+                    let col = [board[0][c], board[1][c], board[2][c], board[3][c]];
+                    if (dir === 'down') col.reverse();
+                    col = slide(col);
+                    col = combine(col);
+                    col = slide(col);
+                    if (dir === 'down') col.reverse();
+                    for (let r = 0; r < 4; r++) board[r][c] = col[r];
+                }
+            }
+
+            if (JSON.stringify(board) !== oldBoard) {
+                spawnTile();
+                drawBoard();
+                checkGameOver();
+            }
+        }
+
+        function checkGameOver() {
+            // Check for empty spots
+            for(let r=0; r<4; r++)
+                for(let c=0; c<4; c++)
+                    if(board[r][c] == 0) return;
+
+            // Check for merges
+            for(let r=0; r<4; r++) {
+                for(let c=0; c<4; c++) {
+                    if(c<3 && board[r][c] == board[r][c+1]) return;
+                    if(r<3 && board[r][c] == board[r+1][c]) return;
+                }
+            }
+            alert("Game Over! Score: " + score);
+        }
+
+        // --- Controls (Keyboard & Touch) ---
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === "ArrowLeft") move('left');
+            if (e.key === "ArrowRight") move('right');
+            if (e.key === "ArrowUp") move('up');
+            if (e.key === "ArrowDown") move('down');
+        });
+
+        // Touch Swipe Logic
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        }, {passive: false});
+
+        document.addEventListener('touchend', (e) => {
+            if(!touchStartX || !touchStartY) return;
+            
+            let dx = e.changedTouches[0].clientX - touchStartX;
+            let dy = e.changedTouches[0].clientY - touchStartY;
+            
+            if (Math.abs(dx) > Math.abs(dy)) {
+                if (Math.abs(dx) > 30) move(dx > 0 ? 'right' : 'left');
+            } else {
+                if (Math.abs(dy) > 30) move(dy > 0 ? 'down' : 'up');
+            }
+        });
+
+        initGame();
+    </script>
+</body>
+</html>
+"""
+
+@app.route('/')
+def index():
+    return render_template_string(GAME_TEMPLATE)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+
