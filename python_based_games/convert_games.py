@@ -1,18 +1,7 @@
 import os
 import re
 
-# Dictionary mapping your filenames to Nice Display Names
-# Note: Chess is excluded because it needs a backend server.
-game_files = {
-    'snake_game.py': 'Classic Snake',
-    'mario_game.py': 'Super Mario Style',
-    'craft_game.py': 'Termux Craft (Minecraft 2D)',
-    'shooting_game.py': 'Neon Space Shooter',
-    'vice_city_game.py': 'Vice City 3D (Open World)',
-    'birds.py': 'Angry Birds Clone',
-    '2048_game.py' : '2048 Game'
-}
-
+# 1. SETUP THE INDEX HTML HEADER
 index_content = """
 <!DOCTYPE html>
 <html>
@@ -28,8 +17,10 @@ index_content = """
             text-decoration: none; color: white; border-radius: 10px; 
             border-left: 5px solid #2ecc71; transition: 0.3s;
             text-align: left; font-size: 18px; font-weight: bold;
+            display: flex; justify-content: space-between; align-items: center;
         }
         .game-link:hover { background: #444; border-left-color: #f1c40f; transform: translateX(5px); }
+        .arrow { color: #777; }
         .note { font-size: 12px; color: #777; margin-top: 50px; }
     </style>
 </head>
@@ -38,47 +29,66 @@ index_content = """
     <div class="game-container">
 """
 
-print("--- Converting Games to HTML ---")
+print("--- 🔄 Auto-Detecting and Converting Games ---")
 
-found_any = False
+# 2. SCAN FOLDER FOR ALL PYTHON FILES
+files = [f for f in os.listdir('.') if f.endswith('.py')]
+files.sort() # Sort alphabetically
 
-for py_file, display_name in game_files.items():
-    if not os.path.exists(py_file):
-        print(f"⚠️  Skipping {py_file} (File not found in folder)")
+count = 0
+
+for py_file in files:
+    # Skip this script itself
+    if py_file == "convert_games.py":
         continue
 
-    with open(py_file, 'r') as f:
+    with open(py_file, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    # Regex to find the HTML content inside GAME_TEMPLATE or HTML_TEMPLATE
-    match = re.search(r'(?:GAME|HTML)_TEMPLATE\s*=\s*"""(.*?)"""', content, re.DOTALL)
+    # 3. LOOK FOR THE HTML TEMPLATE
+    # We allow GAME_TEMPLATE, HTML_TEMPLATE, or just TEMPLATE
+    match = re.search(r'(?:GAME|HTML)?_?TEMPLATE\s*=\s*"""(.*?)"""', content, re.DOTALL)
     
     if match:
         html_content = match.group(1)
-        # Create a cleaner HTML filename (e.g., vice_city_game.py -> vice_city.html)
-        html_filename = py_file.replace('_game.py', '').replace('.py', '') + '.html'
         
-        with open(html_filename, 'w') as f:
+        # Determine new filename (e.g., snake_game.py -> snake_game.html)
+        html_filename = py_file.replace('.py', '.html')
+        
+        # Generate a nice display name
+        # 1. Remove .py
+        # 2. Replace underscores with spaces
+        # 3. Capitalize every word
+        display_name = py_file.replace('.py', '').replace('_', ' ').title()
+        
+        # Special fix for specific names if you want them prettier
+        display_name = display_name.replace("Game", "").strip() # Remove redundant "Game"
+        if display_name == "Game 2048": display_name = "2048 Puzzle"
+
+        # Write the HTML file
+        with open(html_filename, 'w', encoding='utf-8') as f:
             f.write(html_content)
             
-        print(f"✅ Converted {py_file} -> {html_filename}")
+        print(f"✅ Found & Converted: {display_name} ({html_filename})")
         
-        # Add to index.html
-        index_content += f'<a href="{html_filename}" class="game-link">{display_name}</a>\n'
-        found_any = True
+        # Add to index
+        index_content += f'<a href="{html_filename}" class="game-link"><span>{display_name}</span> <span class="arrow">▶</span></a>\n'
+        count += 1
     else:
-        print(f"❌ Could not extract HTML from {py_file}")
+        # File exists but has no HTML template (likely a utility script or chess_game.py)
+        print(f"⚠️  Skipped {py_file} (No HTML template found)")
 
+# 4. FINISH INDEX HTML
 index_content += """
     </div>
-    <p class="note">Hosted on GitHub Pages</p>
+    <p class="note">Hosted on GitHub Pages • Auto-Generated</p>
 </body></html>
 """
 
-if found_any:
-    with open('index.html', 'w') as f:
+if count > 0:
+    with open('index.html', 'w', encoding='utf-8') as f:
         f.write(index_content)
-    print("\n✅ 'index.html' created successfully!")
+    print(f"\n🎉 Success! {count} games added to index.html.")
 else:
-    print("\n⚠️  No games were converted. Check if you are running this script in the correct folder.")
+    print("\n❌ No compatible game files found.")
 
