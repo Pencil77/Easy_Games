@@ -8,7 +8,7 @@ GAME_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Musical Chairs</title>
+    <title>Musical Chairs Pro</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -105,7 +105,7 @@ GAME_TEMPLATE = """
 </head>
 <body>
 
-    <h1>🎵 Musical Chairs</h1>
+    <h1>🎵 Musical Chairs Pro</h1>
 
     <div class="container">
         <div class="input-group">
@@ -158,12 +158,10 @@ GAME_TEMPLATE = """
         firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
         var player;
-        var stopTime = 0;
+        var targetStopTimestamp = 0; // The exact second on the video timeline to stop
         var timerInterval = null;
         var isApiReady = false;
         var isPlaylist = false;
-        
-        // FLAG: Tracks if we need to force jump to start time
         var shouldSkipIntro = false; 
 
         function onYouTubeIframeAPIReady() { isApiReady = true; }
@@ -207,8 +205,8 @@ GAME_TEMPLATE = """
             document.getElementById('play-btn').disabled = true;
             document.getElementById('status').innerText = "Loading...";
 
-            // Initial Random Time Calculation
-            prepareRandomTimer();
+            // CALCULATE TARGET TIMESTAMP IMMEDIATELY
+            calculateStopTarget();
 
             var playerConfig = {
                 height: '360',
@@ -238,11 +236,17 @@ GAME_TEMPLATE = """
             }
         }
 
-        function prepareRandomTimer() {
+        function calculateStopTarget() {
+            var startSec = parseTime(document.getElementById('start-time').value);
             var minSec = parseTime(document.getElementById('min-time').value);
             var maxSec = parseTime(document.getElementById('max-time').value);
-            // Calculate random duration
-            stopTime = Math.floor(Math.random() * (maxSec - minSec + 1)) + minSec;
+            
+            // Random duration
+            var duration = Math.floor(Math.random() * (maxSec - minSec + 1)) + minSec;
+            
+            // THE FIX: Anchor the target strictly to the Start Setting
+            targetStopTimestamp = startSec + duration;
+            console.log("Planned Stop at: " + targetStopTimestamp);
         }
 
         function onPlayerReady(event) {
@@ -253,21 +257,17 @@ GAME_TEMPLATE = """
         }
 
         function onPlayerStateChange(event) {
-            // State 1 = PLAYING
             if (event.data === YT.PlayerState.PLAYING) {
-                // THE FIX: If this flag is true (set by Next/Prev buttons),
-                // we immediately jump to the start time.
                 if (shouldSkipIntro) {
                     var startSec = parseTime(document.getElementById('start-time').value);
                     player.seekTo(startSec);
-                    shouldSkipIntro = false; // Reset flag
+                    shouldSkipIntro = false; 
                     
-                    // Reset random timer for the new song
-                    prepareRandomTimer();
+                    // Recalculate target for new song
+                    calculateStopTarget();
                     startTracking();
                 }
             }
-
             if (event.data === YT.PlayerState.ENDED) {
                 clearInterval(timerInterval);
                 document.getElementById('status').innerText = "Finished.";
@@ -280,7 +280,6 @@ GAME_TEMPLATE = """
 
             var startSec = parseTime(document.getElementById('start-time').value);
             var hasStarted = false;
-            var targetTimestamp = 0;
 
             document.getElementById('status').innerText = "Buffering...";
             document.getElementById('status').className = "";
@@ -293,12 +292,9 @@ GAME_TEMPLATE = """
 
                 if (playerState === 1) { // Playing
                     if (!hasStarted) {
-                        // Wait until we are close to the start time (or past it)
-                        // This prevents logic from firing while YT is still at 0:00
-                        if(Math.abs(currentTime - startSec) < 2 || currentTime > startSec) {
+                        // Wait until video is roughly near the start point
+                        if(Math.abs(currentTime - startSec) < 5 || currentTime > startSec) {
                             hasStarted = true;
-                            // Target = Current Time + Random Duration
-                            targetTimestamp = currentTime + stopTime;
                         }
                     }
 
@@ -306,7 +302,8 @@ GAME_TEMPLATE = """
                         document.getElementById('status').innerText = "Playing... 🎵";
                         document.getElementById('status').style.color = "#2ecc71";
 
-                        if (currentTime >= targetTimestamp) {
+                        // EXACT CHECK: Compare current time against the FIXED target
+                        if (currentTime >= targetStopTimestamp) {
                             player.pauseVideo();
                             clearInterval(timerInterval);
                             
@@ -317,13 +314,12 @@ GAME_TEMPLATE = """
                         }
                     }
                 }
-            }, 100);
+            }, 50); // Increased check frequency for better precision
         }
 
         // --- Playlist Controls ---
         function nextVideo() {
             if(player && isPlaylist) {
-                // Set flag to force seek when next video starts playing
                 shouldSkipIntro = true; 
                 player.nextVideo();
                 updateUIForSkip();
