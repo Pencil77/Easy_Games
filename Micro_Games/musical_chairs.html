@@ -89,7 +89,7 @@
             color: #2ecc71;
             min-height: 24px;
         }
-        .stop-info { color: #e74c3c !important; font-size: 22px !important; }
+        .stop-info { color: #e74c3c !important; font-size: 20px !important; }
 
         .video-wrapper {
             position: relative; padding-bottom: 56.25%; height: 0;
@@ -106,7 +106,7 @@
     <div class="container">
         <div class="input-group">
             <label>YouTube Link (Video or Playlist):</label>
-            <input type="text" id="yt-link" placeholder="Paste YouTube link here...">
+            <input type="text" id="yt-link" placeholder="Paste YouTube link here..." value="https://youtube.com/playlist?list=PL9bw4S5ePsEF-J_tIORZ6xE_OXkGuKjjY&si=Edxn98n3lSnAFFsi">
         </div>
 
         <div class="row">
@@ -154,12 +154,10 @@
         firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
         var player;
-        var stopTime = 0;
+        var currentRandomDuration = 0;
         var timerInterval = null;
         var isApiReady = false;
         var isPlaylist = false;
-        
-        // FLAG: Tracks if we need to force jump to start time
         var shouldSkipIntro = false; 
 
         function onYouTubeIframeAPIReady() { isApiReady = true; }
@@ -219,6 +217,7 @@
             if (player && typeof player.loadVideoById === 'function') {
                 if (isPlaylist) {
                     player.loadPlaylist({list: ids.listId, listType: 'playlist', index: 0, startSeconds: startSec});
+                    player.setShuffle(true); // Enable Shuffle
                 } else {
                     player.loadVideoById({videoId: ids.videoId, startSeconds: startSec});
                 }
@@ -238,10 +237,12 @@
             var minSec = parseTime(document.getElementById('min-time').value);
             var maxSec = parseTime(document.getElementById('max-time').value);
             // Calculate random duration
-            stopTime = Math.floor(Math.random() * (maxSec - minSec + 1)) + minSec;
+            currentRandomDuration = Math.floor(Math.random() * (maxSec - minSec + 1)) + minSec;
         }
 
         function onPlayerReady(event) {
+            if(isPlaylist) event.target.setShuffle(true); // Shuffle on init
+            
             var startSec = parseTime(document.getElementById('start-time').value);
             event.target.seekTo(startSec);
             event.target.playVideo();
@@ -251,14 +252,12 @@
         function onPlayerStateChange(event) {
             // State 1 = PLAYING
             if (event.data === YT.PlayerState.PLAYING) {
-                // THE FIX: If this flag is true (set by Next/Prev buttons),
-                // we immediately jump to the start time.
+                // Force jump to start time if skipping tracks
                 if (shouldSkipIntro) {
                     var startSec = parseTime(document.getElementById('start-time').value);
                     player.seekTo(startSec);
-                    shouldSkipIntro = false; // Reset flag
+                    shouldSkipIntro = false; 
                     
-                    // Reset random timer for the new song
                     prepareRandomTimer();
                     startTracking();
                 }
@@ -276,7 +275,7 @@
 
             var startSec = parseTime(document.getElementById('start-time').value);
             var hasStarted = false;
-            var targetTimestamp = 0;
+            var targetTimestamp = 0; // The video timestamp where we stop
 
             document.getElementById('status').innerText = "Buffering...";
             document.getElementById('status').className = "";
@@ -290,11 +289,10 @@
                 if (playerState === 1) { // Playing
                     if (!hasStarted) {
                         // Wait until we are close to the start time (or past it)
-                        // This prevents logic from firing while YT is still at 0:00
                         if(Math.abs(currentTime - startSec) < 2 || currentTime > startSec) {
                             hasStarted = true;
-                            // Target = Current Time + Random Duration
-                            targetTimestamp = currentTime + stopTime;
+                            // ALIGNMENT FIX: Strictly add duration to user's Start Time
+                            targetTimestamp = startSec + currentRandomDuration;
                         }
                     }
 
@@ -306,8 +304,11 @@
                             player.pauseVideo();
                             clearInterval(timerInterval);
                             
-                            var finalTime = currentTime.toFixed(1);
-                            document.getElementById('status').innerText = "🛑 STOPPED at " + finalTime + "s";
+                            var playedTime = (currentTime - startSec).toFixed(1);
+                            var stopStamp = currentTime.toFixed(1);
+                            
+                            // Updated Display Logic to avoid confusion
+                            document.getElementById('status').innerHTML = "🛑 PLAYED for " + playedTime + "s <br><span style='font-size:16px'>(Stopped at " + stopStamp + "s)</span>";
                             document.getElementById('status').className = "stop-info";
                             document.getElementById('play-btn').disabled = false;
                         }
@@ -316,10 +317,8 @@
             }, 100);
         }
 
-        // --- Playlist Controls ---
         function nextVideo() {
             if(player && isPlaylist) {
-                // Set flag to force seek when next video starts playing
                 shouldSkipIntro = true; 
                 player.nextVideo();
                 updateUIForSkip();
